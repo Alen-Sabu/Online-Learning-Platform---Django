@@ -38,8 +38,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    #documentation
+    'drf_yasg',
+
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
+    'channels',
+    'storages',
 
     #local apps
     'users',
@@ -76,8 +81,19 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'online_learning.wsgi.application'
+# WSGI_APPLICATION = 'online_learning.wsgi.application'
 
+ASGI_APPLICATION = 'online_learning.asgi.application'
+
+#Channel Layers: Configure Channelss to use Redis for handling WebSocket connections and message routing
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)]
+        }
+    }
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -168,3 +184,14 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
 }
+
+# stripe
+STRIPE_SECRET_KEY = 'sk_test_51PVOll2KPzvfsG5esD1NcD80EOcfyrAD5m02YXesU97HSTapvMcYYCF7tuCPQVny1DJRLxFayHQg1xMcuxiErn1J00gB6VdE11'
+STRIPE_PUBLISHABLE_KEY = 'pk_test_51PVOll2KPzvfsG5ePol9bHbVDqlYyBxTqbB07MZyFGY3pvAu45xkLhCciIbI1V9XtBRFx7i74N3lgcGaeWvZnXpP00yi8zfMtw'  
+
+
+# FILE STORAGE
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+AWS_ACCESS_KEY_ID = 'your-access-key-id'
+AWS_SECRET_ACCESS_KEY = 'your-secret-access-key'
+AWS_STORAGE_BUCKET_NAME = 'your-bucket-name'

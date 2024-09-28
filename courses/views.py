@@ -1,6 +1,10 @@
+import stripe.error
+import stripe
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.generics import (
     GenericAPIView, 
     RetrieveUpdateAPIView, 
@@ -13,10 +17,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.serializers import Serializer
 from courses import serializers
-from courses.models import Course, Enrollment, Lecture
+from courses.models import Course, Enrollment, Lecture, Payment
 from courses.permissions import IsInstructorAndOwner
+from drf_yasg.utils import swagger_auto_schema
 
+stripe.api_key = settings.STRIPE_SECRET_KEY
 User = get_user_model()
+
 
 class InstructorRegisterationAPIView(GenericAPIView):
     """
@@ -38,7 +45,6 @@ class InstructorLoginAPIView(GenericAPIView):
     """
     An endpoint to authenticate existing instructors
     """
-
     permission_classes = (AllowAny,)
     serializer_class = serializers.InstructorLoginSerializer
 
@@ -68,11 +74,11 @@ class InstructorLogoutAPIView(GenericAPIView):
         except Exception as e:
             return Response(status=status.HTTP_400_BAD_REQUEST)
         
+
 class InstructorAPIView(RetrieveUpdateAPIView):
     """
     Get, update Instructor information
     """
-
     permission_classes = (IsAuthenticated,)
     serializer_class = serializers.InstructorSerializer
 
@@ -173,3 +179,30 @@ class LectureDetailAPIView(RetrieveUpdateAPIView):
         else:
             self.permission_classes = (IsAuthenticated,)
         return super().get_permissions()
+    
+class PaymentView(APIView):
+    def post(self, request):
+        serializer = serializers.PaymentSerializer(data = request.data)
+        if serializer.is_valid():
+            amount = serializer.validated_data['amount']
+            currency = serializer.validated_data['currency']
+            source = serializer.validated_data['source']
+
+            try:
+                charge = stripe.Charge.create(
+                    amount=int(amount * 100),
+                    currency=currency,
+                    source=source,
+                    description='Payment Charge'
+                )
+
+                #save payment details to database (optional)
+                Payment.objects.create(
+                    stripe_charge_id = charge.id,
+                    amount = amount,
+                    success = True
+                )
+                return Response({'message': 'Payment successful', 'charge_id': charge.id}, status=status.HTTP_200_OK)
+            except stripe.error.StripeError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

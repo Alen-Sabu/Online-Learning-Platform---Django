@@ -1,5 +1,5 @@
 from django.db import models
-from courses.models import Course
+from courses.models import Course, Instructor
 from django.contrib.auth import get_user_model
 
 CustomUser = get_user_model()
@@ -13,6 +13,16 @@ class Assignment(models.Model):
     def __str__(self) -> str:
         return self.title
     
+class Notification(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='notifications')
+    assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE, related_name='notifications')
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read = models.BooleanField(default=False)
+
+    def __str__(self) -> str:
+        return self.message
+    
 class Submission(models.Model):
     assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -20,4 +30,4 @@ class Submission(models.Model):
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('assigbment', 'user')
+        unique_together = ('assignment', 'user')

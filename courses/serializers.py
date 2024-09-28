@@ -108,3 +108,11 @@ class LectureSerializer(serializers.ModelSerializer):
         model = Lecture
         fields = ['id', 'course', 'title', 'description', 'video_file', 'video_thumbnail', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+
+class PaymentSerializer(serializers.Serializer):
+    """Serializer class for each payment"""
+    course = CourseSerializer(read_only = True)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    currency = serializers.CharField(max_length = 3)
+    source = serializers.CharField(max_length = 255)
