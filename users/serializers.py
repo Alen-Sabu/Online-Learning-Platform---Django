@@ -8,7 +8,10 @@ class CustomUserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = CustomUser
-        fields = ('id', 'username', 'email')
+        fields = ("id", "username", "email", "first_name", "last_name", "profile_picture")  # Add other fields if needed
+        extra_kwargs = {
+            "email": {"read_only": True},  # Prevent email modification if necessary
+        }
 
 class UserRegisterationSerializer(serializers.ModelSerializer):
     """
@@ -39,6 +42,7 @@ class UserLoginSerializer(serializers.Serializer):
             if user and user.is_active:
                 return user
             else:
+                
                 raise serializers.ValidationError("Incorrect credentials")
         else:
             raise serializers.ValidationError("Both the fields are required")

@@ -1,20 +1,21 @@
-from django.urls import path
+from django.urls import path,include
 from courses import views
+from rest_framework.routers import DefaultRouter
+
 
 urlpatterns = [
-    path('instructor/<int:instructor_id>/', views.InstructorAPIView.as_view(), name='instructor'),
-    path('instructor/register/', views.InstructorRegisterationAPIView.as_view(), name='instructor-register'),
-    path('instructor/login/', views.InstructorLoginAPIView.as_view(), name='instructor-login'),
-    path('instructor/logout/', views.InstructorLogoutAPIView.as_view(), name='instructor-logout'),
-    path('instructor/courses/', views.InstructorCourseListCreateAPIView.as_view(), name='instructor-course'),
-    path('instructor/courses/<int:pk>', views.InstructorCourseDetailAPIView.as_view(), name='instructor-course-detail'),
-    path('instructor/enrollments/', views.InstructorCourseEnrollmentsAPIView.as_view(), name='instructor-course-enrollments'),
-
+  
     path('courses/', views.CourseAPIView.as_view(), name='courses'),
-    path('courses/<int:course_id>/enroll/', views.EnrollmentCreateAPIView.as_view(), name='course-enroll'),
-    path('courses/<int:course_id>/lectures/', views.LectureListCreateAPIView.as_view(), name='lecture-list-create'),
-    path('courses/<int:course_id>/lectures/<int:pk>/', views.LectureDetailAPIView.as_view(), name='lecture-detail'),
+    path("categories/", views.CategoryListView.as_view(), name="category-list"),
+    path('courses/<int:pk>/', views.CourseDetailAPIView.as_view(), name='course-detail'),
+    path('lectures/<int:pk>/', views.LectureDetailAPIView.as_view(), name='lecture-detail'),
+    path('lectures/<int:lecture_id>/complete/', views.MarkLectureCompleteView.as_view(), name="mark-lecture-complete"),
+    path("my-courses/", views.MyCoursesView.as_view(), name='my-courses'),
 
-    path('courses/payment/', views.PaymentView.as_view(), name='payment')
+    path('courses/enroll/', views.EnrollmentCreateAPIView.as_view(), name='course-enroll'),
+
+    path('courses/payment/', views.PaymentView.as_view(), name='payment'),
+    path('webhooks/stripe/', views.StripeWebhookView.as_view(), name='stripe-webhook'),
+    path('courses/verify-payment/', views.VerifyPaymentView.as_view()),
     
 ]

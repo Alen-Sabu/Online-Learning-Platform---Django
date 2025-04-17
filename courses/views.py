@@ -6,106 +6,22 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import (
-    GenericAPIView, 
     RetrieveUpdateAPIView, 
     ListAPIView, 
-    ListCreateAPIView, 
-    RetrieveUpdateDestroyAPIView, 
+    RetrieveAPIView,
     CreateAPIView,
+    UpdateAPIView,
     get_object_or_404, )
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.serializers import Serializer
 from courses import serializers
-from courses.models import Course, Enrollment, Lecture, Payment
-from courses.permissions import IsInstructorAndOwner
+from courses.models import Course,Category, Enrollment, Lecture, LectureProgress, Payment
 from drf_yasg.utils import swagger_auto_schema
+from rest_framework import viewsets
+from instructor.permissions import IsInstructorAndOwner
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 User = get_user_model()
-
-
-class InstructorRegisterationAPIView(GenericAPIView):
-    """
-    An endpoint for registeration of instructor
-    """
-    serializer_class = serializers.InstructorRegisterationSerializer
-    permission_classes = (AllowAny,)
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data = request.data)
-        serializer.is_valid(raise_exception = True)
-        user = serializer.save()
-        token = RefreshToken.for_user(user)
-        data = serializer.data 
-        data['tokens'] = {'refresh': str(token), 'access': str(token.access_token)}
-        return Response(data, status=status.HTTP_201_CREATED)
-    
-class InstructorLoginAPIView(GenericAPIView):
-    """
-    An endpoint to authenticate existing instructors
-    """
-    permission_classes = (AllowAny,)
-    serializer_class = serializers.InstructorLoginSerializer
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data = request.data)
-        serializer.is_valid(raise_exception = True)
-        user = serializer.validated_data['user']
-        serializer = serializers.InstructorSerializer(user.instructor)
-        token = RefreshToken.for_user(user)
-        data = serializer.data 
-        data['tokens'] = {'refresh': str(token), "access": str(token.access_token)}
-        return Response(data, status=status.HTTP_200_OK)
-    
-class InstructorLogoutAPIView(GenericAPIView):
-    """
-    An endpoint to logout existing instructor
-    """
-    permission_classes = (IsAuthenticated,)
-    serializer_class = Serializer
-
-    def post(self, request, *args, **kwargs):
-        try:
-            refresh_token = request.data['refresh']
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            return Response(status = status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        
-
-class InstructorAPIView(RetrieveUpdateAPIView):
-    """
-    Get, update Instructor information
-    """
-    permission_classes = (IsAuthenticated,)
-    serializer_class = serializers.InstructorSerializer
-
-    def get_object(self):
-        return self.request.user.instructor
-
-class InstructorCourseListCreateAPIView(ListCreateAPIView):
-    """
-    An endpoint to retrieve and create courses for authenticated instructors
-    """
-    serializer_class = serializers.InstructorCourseSerializer
-    permission_classes = (IsAuthenticated,)
-
-    def get_queryset(self):
-        return Course.objects.filter(instructor__user = self.request.user)
-    
-    def perform_create(self, serializer):
-        serializer.save(instructor = self.request.user.instructor)
-
-class InstructorCourseDetailAPIView(RetrieveUpdateDestroyAPIView):
-    """
-    API View to retrieve, update, and destroy a course for authenticated instructors
-    """
-    queryset = Course.objects.all()
-    serializer_class = serializers.InstructorCourseSerializer
-    permission_classes = (IsInstructorAndOwner,)
-
+     
 class CourseAPIView(ListAPIView):
     """
     Get all the courses
@@ -114,17 +30,55 @@ class CourseAPIView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = serializers.CourseSerializer
 
-class InstructorCourseEnrollmentsAPIView(ListAPIView):
+class CategoryListView(ListAPIView):
+    queryset = Category.objects.all()
+    serializer_class = serializers.CategorySerializer
+    permission_classes = [AllowAny]
+
+class CourseDetailAPIView(RetrieveAPIView):
+    queryset = Course.objects.all()
+    serializer_class = serializers.CourseDetailSerializer
+    permission_classes = (AllowAny,)
+
+class LectureDetailAPIView(RetrieveUpdateAPIView):
     """
-    An endpoint to get all the users enrolled for each course
+    An endpoint to update and delete each lectures of a course
     """
+    serializer_class = serializers.LectureSerializer
+    queryset = Lecture.objects.all()
+    permission_classes = (IsAuthenticated,)
+
+    def get_permissions(self):
+        if self.request.method in ["PUT","PATCH", "DELETE"]:
+            self.permission_classes = (IsInstructorAndOwner,)
+        else:
+            self.permission_classes = (IsAuthenticated,)
+        return super().get_permissions()
+
+class MarkLectureCompleteView(UpdateAPIView):
+    serializer_class = serializers.LectureProgressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        lecture_id = kwargs.get("lecture_id")
+        progress, created = LectureProgress.objects.get_or_create(
+             user = request.user,
+             lesson_id=lecture_id
+        )
+
+        progress.completed = True
+        progress.save()
+        return Response({"message": "Lecture marked as completed", "completed": progress.completed})
+      
+class MyCoursesView(ListAPIView):
+    """Retrieve courses the authenticated user is enrolled in"""
     serializer_class = serializers.EnrollmentSerializer
-    permission_classes = (IsInstructorAndOwner,)
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        instructor = self.request.user.instructor
-        return Enrollment.objects.filter(course__instructor = instructor)
-        
+        data = Enrollment.objects.filter(user=self.request.user)
+        return data
+  
 class EnrollmentCreateAPIView(CreateAPIView):
     """
     An endpoint to enroll users to each course
@@ -134,75 +88,106 @@ class EnrollmentCreateAPIView(CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data = request.data)
+    
         serializer.is_valid(raise_exception = True)
-        enrollment = self.perform_create(serializer)
-        course_serializer = serializers.CourseSerializer(enrollment.course)
-        data = course_serializer.data
-        return Response(data, status=status.HTTP_201_CREATED)
+        enrollment = serializer.save()
+    
+        return Response({"message": "Successfully enrolled in the course"}, status=status.HTTP_201_CREATED)
 
     def perform_create(self, serializer):
-        return serializer.save()
-    
-class LectureListCreateAPIView(ListCreateAPIView):
-    """
-    An endpoint to get the lectures of a course and create the lecture for each course
-    """
-    serializer_class = serializers.LectureSerializer
+        serializer.save(user = self.request.user)
 
-    def get_queryset(self):
-        return Lecture.objects.filter(course_id = self.kwargs['course_id'])
-    
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            self.permission_classes = (IsInstructorAndOwner,)
-        else:
-            self.permission_classes = (IsAuthenticated,)
-        return super().get_permissions()
-    
-    def perform_create(self, serializer):
-        course = get_object_or_404(Course, id = self.kwargs['course_id'])
-        serializer.save(course = course)
 
-class LectureDetailAPIView(RetrieveUpdateAPIView):
-    """
-    An endpoint to update and delete each lectures of a course
-    """
-    serializer_class = serializers.LectureSerializer
-    permission_classes = (IsAuthenticated,)
-
-    def get_queryset(self):
-        return Lecture.objects.filter(course_id = self.kwargs['course_id'])
-    
-    def get_permissions(self):
-        if self.request.method in ["PUT","PATCH", "DELETE"]:
-            self.permission_classes = (IsInstructorAndOwner,)
-        else:
-            self.permission_classes = (IsAuthenticated,)
-        return super().get_permissions()
-    
 class PaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        serializer = serializers.PaymentSerializer(data = request.data)
-        if serializer.is_valid():
-            amount = serializer.validated_data['amount']
-            currency = serializer.validated_data['currency']
-            source = serializer.validated_data['source']
+        course_id = request.data.get("course_id")
+        try:
+            course = Course.objects.get(id=course_id)
+
+            user = request.user
+
+        # Check if user is already enrolled
+            if Enrollment.objects.filter(user=user, course=course).exists():
+                return Response(
+                {"detail": "You are already enrolled in this course."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+            if course.price <= 0:
+                return Response({"error": "Course is free. No payment needed."}, status=400)
+
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                customer_email=user.email, 
+                line_items=[{
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {
+                            "name": course.title,
+                        },
+                        "unit_amount": int(course.price * 100),
+                    },
+                    "quantity": 1,
+                }],
+                mode="payment",
+                success_url='http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}',
+                cancel_url='http://localhost:5173/cancel',
+                metadata={
+                    "course_id": str(course.id),
+                    "user_id": str(request.user.id),
+                },
+            )
+          
+            return Response({"session_id": session.id})
+        except Course.DoesNotExist:
+            return Response({"error": "Course not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+class StripeWebhookView(APIView):
+    def post(self, request, *args, **kwargs):
+        payload = request.body
+        sig_header = request.META['HTTP_STRIPE_SIGNATURE']
+        endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except (ValueError, stripe.error.SignatureVerificationError):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        if event['type'] == 'checkout.session.completed':
+            session = event['data']['object']
+            customer_email = session.get('customer_email')
+            course_id = session.get('metadata', {}).get('course_id')
 
             try:
-                charge = stripe.Charge.create(
-                    amount=int(amount * 100),
-                    currency=currency,
-                    source=source,
-                    description='Payment Charge'
-                )
+                course = Course.objects.get(id=course_id)
+                user = User.objects.get(email=customer_email)
 
-                #save payment details to database (optional)
-                Payment.objects.create(
-                    stripe_charge_id = charge.id,
-                    amount = amount,
-                    success = True
-                )
-                return Response({'message': 'Payment successful', 'charge_id': charge.id}, status=status.HTTP_200_OK)
-            except stripe.error.StripeError as e:
-                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                # Prevent duplicate enrollments
+                if not Enrollment.objects.filter(user=user, course=course).exists():
+                    Enrollment.objects.create(user=user, course=course)
+            except Exception as e:
+                print("Enrollment error:", e)
+
+        return Response(status=status.HTTP_200_OK)
+    
+
+    
+class VerifyPaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        session_id = request.GET.get("session_id")
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            if session.payment_status == 'paid':
+                return Response({"message": "Payment verified and enrollment completed."})
+            return Response({"error": "Payment not completed"}, status=400)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)

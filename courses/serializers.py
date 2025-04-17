@@ -1,88 +1,90 @@
 from rest_framework import serializers
-from courses.models import Instructor, Course, Lecture, Enrollment
+from courses.models import Instructor, Category, Course, Lecture, Enrollment, LectureProgress
 from django.contrib.auth import get_user_model, authenticate
 from users.serializers import CustomUserSerializer
+from instructor.serializers import InstructorSerializer
 
 User = get_user_model()
-
-class InstructorSerializer(serializers.ModelSerializer):
-    """
-    Serialzier class for instructor
-    """
-    user = CustomUserSerializer()
+class CategorySerializer(serializers.ModelSerializer):
     class Meta:
-        model = Instructor
-        fields = ['id', 'user', 'bio', 'profile_picture']
-
-class InstructorRegisterationSerializer(serializers.ModelSerializer):
-    """
-    Serializer class for instructor registeration
-    """
-    email = serializers.EmailField(required = True)
-    username = serializers.CharField(required = True)
-    password = serializers.CharField(write_only = True, required = True)
-
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'username', 'password']
-
-    def create(self, validated_data):
-        user = User.objects.create_user(
-            email = validated_data['email'],
-            username = validated_data['username'],
-            password = validated_data['password'],
-            is_instructor = True
-        )
-        Instructor.objects.create(user = user)
-        return user
-    
-class InstructorLoginSerializer(serializers.Serializer):
-    """
-    Serializer class for instructor login
-    """
-    email = serializers.CharField(required = True)
-    password = serializers.CharField(write_only = True, required = True)
-
-    def validate(self, data):
-        email = data.get('email')
-        password = data.get('password')
-
-        if email and password:
-            user = authenticate(email = email, password = password)
-            if user and user.is_active and user.is_instructor:
-                return {'user':user, 'email': user.email}
-            else:
-                return serializers.ValidationError("Invalid credentials")
-        else:
-            return serializers.ValidationError("Both the fields are required")
-        
-class InstructorCourseSerializer(serializers.ModelSerializer):
-    """
-    Serializer class for specific course of the instructor
-    """
-    class Meta:
-        model = Course
-        fields = ['id', 'title', 'description', 'instructor', 'created_at', 'updated_at']
-        read_only_fields = ['instructor', 'created_at', 'updated_at']
+        model = Category
+        fields = ["id", "name"]
 
 class CourseSerializer(serializers.ModelSerializer):
     """
     Serializer class for courses
     """
     instructor = InstructorSerializer(read_only = True)
+    category = CategorySerializer(read_only = True)
+
     class Meta:
         model = Course
-        fields = ['id', 'instructor', 'title', 'description', 'created_at', 'thumbnail']
+        fields = ['id', 'instructor','category', 'title', 'description', 'created_at','price','thumbnail']
 
+class LectureProgressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LectureProgress
+        fields = ['id','lesson', 'completed','progress']
+
+    
 class EnrollmentSerializer(serializers.ModelSerializer):
     """
     Serializer class to get the users enrolled for each course for instructors
     """
     user = CustomUserSerializer(read_only = True)
-
+    course = CourseSerializer(read_only=True) 
+    lesson_progress = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
     class Meta:
         model = Enrollment
-        fields = ['id', 'user', 'enrolled_at']
+        fields = ['id', 'user', 'enrolled_at','course','progress', 'lesson_progress']
+    
+    def get_progress(self, obj):
+        total_lessons = obj.course.lecture.count()
+        if total_lessons == 0:
+            return 0
+        
+        completed_lessons = LectureProgress.objects.filter(
+            user=obj.user,
+            lesson__course=obj.course,
+            completed=True
+        ).count()
+
+        return (completed_lessons / total_lessons) * 100
+
+    def get_lesson_progress(self, obj):
+        progress_qs = LectureProgress.objects.filter(
+            user=obj.user,
+            lesson__course=obj.course
+        )
+        return LectureProgressSerializer(progress_qs, many=True).data
+  
+class LectureSerializer(serializers.ModelSerializer):
+    """
+    Serializer class for each lecture in a course
+    """
+    
+    progress = serializers.SerializerMethodField()
+    class Meta:
+        model = Lecture
+        fields = ['id', 'course','progress', 'title', 'description', 'video_file', 'video_thumbnail', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_progress(self, obj):
+        user = self.context['request'].user
+        if user.is_authenticated:
+            progress = LectureProgress.objects.filter(lesson = obj).first()
+            return LectureProgressSerializer(progress).data if progress else {"completed": False}
+        return None
+
+class CourseDetailSerializer(serializers.ModelSerializer):
+    lecture = LectureSerializer(many = True, read_only = True)
+    instructor = InstructorSerializer(read_only = True)
+    class Meta:
+        model = Course 
+        fields = ['id','instructor', 'title', 'description', 'created_at','price','thumbnail', 'lecture' ]
+    
+
 
 class EnrollmentCreateSerializer(serializers.ModelSerializer):
     """
@@ -95,20 +97,12 @@ class EnrollmentCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = self.context['request'].user
         course = validated_data['course']
+
         enrollment, created = Enrollment.objects.get_or_create(user = user, course = course)
         if not created:
             raise serializers.ValidationError("You are already enrolled in this course")
         return enrollment
-    
-class LectureSerializer(serializers.ModelSerializer):
-    """
-    Serializer class for each lecture in a course
-    """
-    class Meta:
-        model = Lecture
-        fields = ['id', 'course', 'title', 'description', 'video_file', 'video_thumbnail', 'created_at']
-        read_only_fields = ['id', 'created_at']
-
+ 
 
 class PaymentSerializer(serializers.Serializer):
     """Serializer class for each payment"""

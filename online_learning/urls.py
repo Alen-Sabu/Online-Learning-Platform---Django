@@ -40,13 +40,18 @@ schema_view = get_schema_view(
 
 urlpatterns = [
 
-    path('', include('courses.urls')),
-    path('users/', include('users.urls')),
-    path('messages/', include('messaging.urls')),
+    path('api/', include('courses.urls')),
+    path('api/users/', include('users.urls')),
+    path('api/instructor/', include('instructor.urls')),
+    path('api/messages/', include('messaging.urls')),
     path('assignments/', include('assignments.urls')),
     
     path('admin/', admin.site.urls),
     path("api-auth/", include("rest_framework.urls")),
+
+    path('auth/', include('dj_rest_auth.urls')),  # Basic Auth Endpoints
+    path('auth/registration/', include('dj_rest_auth.registration.urls')),  # Registration Endpoints
+    path('accounts/', include('allauth.urls')),  # Allauth URLs for social login
 
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

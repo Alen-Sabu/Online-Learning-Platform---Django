@@ -41,19 +41,36 @@ INSTALLED_APPS = [
     #documentation
     'drf_yasg',
 
+    'dj_rest_auth',
     'rest_framework',
+    'rest_framework.authtoken',
     'rest_framework_simplejwt.token_blacklist',
     'channels',
     'storages',
 
+    'corsheaders',
+
     #local apps
     'users',
     'courses',
+    'instructor',
     'messaging',
     'assignments',
+
+    #allauth apps
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google'# add more providers if you needed
 ]
 
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+SITE_ID = 1
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -61,6 +78,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'online_learning.urls'
@@ -100,8 +118,12 @@ CHANNEL_LAYERS = {
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'online_learning',
+        'USER': 'postgres',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',
+        'PORT': '5432'
     }
 }
 
@@ -154,7 +176,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=40),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -179,6 +201,11 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1),
 }
 
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend',  # Default backend
+    'allauth.account.auth_backends.AuthenticationBackend',  # Allauth backend
+)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -188,10 +215,16 @@ REST_FRAMEWORK = {
 # stripe
 STRIPE_SECRET_KEY = 'sk_test_51PVOll2KPzvfsG5esD1NcD80EOcfyrAD5m02YXesU97HSTapvMcYYCF7tuCPQVny1DJRLxFayHQg1xMcuxiErn1J00gB6VdE11'
 STRIPE_PUBLISHABLE_KEY = 'pk_test_51PVOll2KPzvfsG5ePol9bHbVDqlYyBxTqbB07MZyFGY3pvAu45xkLhCciIbI1V9XtBRFx7i74N3lgcGaeWvZnXpP00yi8zfMtw'  
-
+STRIPE_WEBHOOK_SECRET = 'whsec_55311c6f09bb4ab1b63d0192049345d820da84629d2954ce78a716217ecdea15'
 
 # FILE STORAGE
-DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+# DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 AWS_ACCESS_KEY_ID = 'your-access-key-id'
 AWS_SECRET_ACCESS_KEY = 'your-secret-access-key'
 AWS_STORAGE_BUCKET_NAME = 'your-bucket-name'
+
+REST_USE_JWT = True  # If you prefer JWT authentication
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_AUTHENTICATION_METHOD = 'email'  # Login with email
+ACCOUNT_UNIQUE_EMAIL = True
